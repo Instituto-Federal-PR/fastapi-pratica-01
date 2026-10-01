@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from app.database import get_db
@@ -44,7 +44,8 @@ def criar_matricula(dados: MatriculaCreate, db: Session = Depends(get_db)):
 # --- 2. LISTAR TODAS AS MATRÍCULAS (GET /matriculas) ---
 @router.get("", response_model=List[MatriculaResponse])
 def listar_matriculas(db: Session = Depends(get_db)):
-    return db.query(Matricula).all()
+    #return db.query(Matricula).all()
+    return db.query(Matricula).options(joinedload(Matricula.aluno)).all()
 
 # --- 3. BUSCAR UMA MATRÍCULA POR IDS (GET /matriculas/{aluno_id}/{disciplina_id}) ---
 @router.get("/{aluno_id}/{disciplina_id}", response_model=MatriculaResponse)

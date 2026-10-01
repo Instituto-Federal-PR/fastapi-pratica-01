@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,  joinedload
 from typing import List
 
 from app.database import get_db
@@ -36,7 +36,8 @@ def criar_disciplina(dados: DisciplinaCreate, db: Session = Depends(get_db)):
 # --- 2. LISTAR TODAS AS DISCIPLINAS (GET /disciplinas) ---
 @router.get("", response_model=List[DisciplinaResponse])
 def listar_disciplinas(db: Session = Depends(get_db)):
-    return db.query(Disciplina).all()
+    # return db.query(Disciplina).all()
+    return db.query(Disciplina).options(joinedload(Disciplina.curso)).all()
 
 # --- 3. BUSCAR UMA DISCIPLINA POR ID (GET /disciplinas/{disciplina_id}) ---
 @router.get("/{disciplina_id}", response_model=DisciplinaResponse)

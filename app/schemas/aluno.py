@@ -1,6 +1,14 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+class CursoResponse(BaseModel):
+    id: int
+    nome: str
+    duracao: int  # em anos, meses ou semestres
+
+    class Config:
+        from_attributes = True
+
 # Dados que o cliente envia ao criar um aluno
 class AlunoCreate(BaseModel):
     nome: str
@@ -15,6 +23,6 @@ class AlunoResponse(BaseModel):
     curso_id: int
     criado_em: datetime
     alterado_em: datetime
-
+    curso: CursoResponse 
     class Config:
         from_attributes = True

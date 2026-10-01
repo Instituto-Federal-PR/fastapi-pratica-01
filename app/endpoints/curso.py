@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from app.database import get_db
@@ -21,7 +21,8 @@ def criar_curso(curso_dados: CursoCreate, db: Session = Depends(get_db)):
 
 @router.get("", response_model=List[CursoResponse])
 def listar_cursos(db: Session = Depends(get_db)):
-    return db.query(Curso).all()
+    # return db.query(Curso).all()
+    return db.query(Curso).options(joinedload(Curso.aluno)).all()
 
 @router.get("/{curso_id}", response_model=CursoResponse)
 def buscar_curso(curso_id: int, db: Session = Depends(get_db)):

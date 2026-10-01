@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 
 from app.database import get_db
@@ -36,7 +36,8 @@ def criar_aluno(dados: AlunoCreate, db: Session = Depends(get_db)):
 # --- 2. LISTAR TODOS OS ALUNOS (GET /alunos) ---
 @router.get("", response_model=List[AlunoResponse])
 def listar_alunos(db: Session = Depends(get_db)):
-    return db.query(Aluno).all()
+    # return db.query(Aluno).all()
+    return db.query(Aluno).options(joinedload(Aluno.curso)).all()
 
 # --- 3. BUSCAR UM ALUNO POR ID (GET /alunos/{aluno_id}) ---
 @router.get("/{aluno_id}", response_model=AlunoResponse)
