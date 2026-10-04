@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
 from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models.curso import Curso  # Importa Curso para validar sua existência
 from app.models.aluno import Aluno
+from app.models.curso import Curso
+from app.models.matricula import Matricula
 from app.schemas import AlunoCreate, AlunoResponse
 
 router = APIRouter(
@@ -14,9 +17,13 @@ router = APIRouter(
 
 # --- 1. CRIAR ALUNO (POST /alunos) ---
 @router.post("", response_model=AlunoResponse, status_code=status.HTTP_201_CREATED)
-def criar_aluno(dados: AlunoCreate, db: Session = Depends(get_db)):
-    # Valida se o curso informado existe?
-    curso_existe = db.query(Curso).filter(Curso.id == dados.curso_id).first()
+async def criar_aluno(
+    dados: AlunoCreate, 
+    db: AsyncSession = Depends(get_db),
+):
+    result_curso = await db.execute(select(Curso).where(Curso.id == dados.curso_id))
+    curso_existe = result_curso.scalar_one_or_none()
+    
     if not curso_existe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
@@ -29,33 +36,65 @@ def criar_aluno(dados: AlunoCreate, db: Session = Depends(get_db)):
         curso_id=dados.curso_id
     )
     db.add(novo_aluno)
-    db.commit()
-    db.refresh(novo_aluno)
-    return novo_aluno
+    await db.commit()
+
+    # Re-consulta com selectinload para pré-carregar a relação `curso`
+    statement = (
+        select(Aluno)
+        .options(selectinload(Aluno.curso))
+        .where(Aluno.id == novo_aluno.id)
+    )
+    result = await db.execute(statement)
+    return result.scalar_one()
+
 
 # --- 2. LISTAR TODOS OS ALUNOS (GET /alunos) ---
 @router.get("", response_model=List[AlunoResponse])
-def listar_alunos(db: Session = Depends(get_db)):
-    # return db.query(Aluno).all()
-    return db.query(Aluno).options(joinedload(Aluno.curso)).all()
+async def listar_alunos(
+    db: AsyncSession = Depends(get_db),
+):
+    statement = select(Aluno).options(
+        selectinload(Aluno.curso),
+        selectinload(Aluno.matricula).selectinload(Matricula.disciplina)
+    )
+    result = await db.execute(statement)
+    return result.scalars().all()
+
 
 # --- 3. BUSCAR UM ALUNO POR ID (GET /alunos/{aluno_id}) ---
 @router.get("/{aluno_id}", response_model=AlunoResponse)
-def buscar_aluno(aluno_id: int, db: Session = Depends(get_db)):
-    aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
+async def buscar_aluno(
+    aluno_id: int, 
+    db: AsyncSession = Depends(get_db),
+):
+    statement = select(Aluno).options(
+        selectinload(Aluno.curso),
+        selectinload(Aluno.matricula).selectinload(Matricula.disciplina)
+    ).where(Aluno.id == aluno_id)
+    result = await db.execute(statement)
+    aluno = result.scalar_one_or_none()
+    
     if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
     return aluno
 
-# --- 4. ATUALIZAR UM ALUNO (PUT /aluno/{aluno_id}) ---
+
+# --- 4. ATUALIZAR UM ALUNO (PUT /alunos/{aluno_id}) ---
 @router.put("/{aluno_id}", response_model=AlunoResponse)
-def atualizar_aluno(aluno_id: int, dados: AlunoCreate, db: Session = Depends(get_db)):
-    aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
-    if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+async def atualizar_aluno(
+    aluno_id: int, 
+    dados: AlunoCreate, 
+    db: AsyncSession = Depends(get_db),
+):
+    result_aluno = await db.execute(select(Aluno).where(Aluno.id == aluno_id))
+    aluno = result_aluno.scalar_one_or_none()
     
-    # Valida se o curso_id mudou para um novo curso válido
-    curso_existe = db.query(Curso).filter(Curso.id == dados.curso_id).first()
+    if not aluno:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+    
+    result_curso = await db.execute(select(Curso).where(Curso.id == dados.curso_id))
+    curso_existe = result_curso.scalar_one_or_none()
+    
     if not curso_existe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
@@ -63,20 +102,36 @@ def atualizar_aluno(aluno_id: int, dados: AlunoCreate, db: Session = Depends(get
         )
     
     aluno.nome = dados.nome
-    aluno.carga_horaria = dados.carga_horaria
+    aluno.turma = dados.turma
     aluno.curso_id = dados.curso_id
     
-    db.commit()
-    db.refresh(aluno)
-    return aluno
+    await db.commit()
+
+    # Re-consulta com selectinload após a atualização
+    statement = (
+        select(Aluno)
+        .options(
+            selectinload(Aluno.curso),
+            selectinload(Aluno.matricula).selectinload(Matricula.disciplina)
+        )
+        .where(Aluno.id == aluno_id)
+    )
+    result = await db.execute(statement)
+    return result.scalar_one()
+
 
 # --- 5. DELETAR UM ALUNO (DELETE /alunos/{aluno_id}) ---
 @router.delete("/{aluno_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deletar_aluno(aluno_id: int, db: Session = Depends(get_db)):
-    aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
-    if not aluno:
-        raise HTTPException(status_code=404, detail="Aluno não encontrado")
+async def deletar_aluno(
+    aluno_id: int, db: 
+    AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Aluno).where(Aluno.id == aluno_id))
+    aluno = result.scalar_one_or_none()
     
-    db.delete(aluno)
-    db.commit()
+    if not aluno:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
+    
+    await db.delete(aluno)
+    await db.commit()
     return None

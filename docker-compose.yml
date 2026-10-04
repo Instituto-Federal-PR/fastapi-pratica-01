@@ -11,7 +11,7 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       # Força o Python a enviar os logs diretamente para o terminal
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=postgresql://post_user:post_pass@db:5432/fastapi_db
+      - DATABASE_URL=postgresql+psycopg://post_user:post_pass@db:5432/fastapi_db
     depends_on:
       - db
 

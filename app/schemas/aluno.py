@@ -1,10 +1,24 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
+
+class DisciplinaSchema(BaseModel):
+    id: int
+    nome: str
+    class Config:
+        from_attributes = True
+    
+class MatriculaResponse(BaseModel):
+    aluno_id: int
+    disciplina_id: int
+    disciplina: Optional[DisciplinaSchema] = None
+    class Config:
+        from_attributes = True
 
 class CursoResponse(BaseModel):
     id: int
     nome: str
-    duracao: int  # em anos, meses ou semestres
+    duracao: int 
 
     class Config:
         from_attributes = True
@@ -23,6 +37,7 @@ class AlunoResponse(BaseModel):
     curso_id: int
     criado_em: datetime
     alterado_em: datetime
-    curso: CursoResponse 
+    curso: CursoResponse
+    matricula: list[MatriculaResponse] = []
     class Config:
         from_attributes = True

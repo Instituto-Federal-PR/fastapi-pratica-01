@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
 from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models.aluno import Aluno  # Importa Curso para validar sua existência
+from app.models.aluno import Aluno
 from app.models.disciplina import Disciplina
 from app.models.matricula import Matricula
 from app.schemas import MatriculaCreate, MatriculaResponse
@@ -13,19 +15,25 @@ router = APIRouter(
     tags=["Matriculas"]
 )
 
-# --- 1. CRIAR DISCIPLINA (POST /disciplinas) ---
+
+# --- 1. CRIAR MATRÍCULA (POST /matriculas) ---
 @router.post("", response_model=MatriculaResponse, status_code=status.HTTP_201_CREATED)
-def criar_matricula(dados: MatriculaCreate, db: Session = Depends(get_db)):
-    # Valida se o aluno informado existe?
-    aluno_existe = db.query(Aluno).filter(Aluno.id == dados.aluno_id).first()
+async def criar_matricula(
+    dados: MatriculaCreate, 
+    db: AsyncSession = Depends(get_db),
+):
+    result_aluno = await db.execute(select(Aluno).where(Aluno.id == dados.aluno_id))
+    aluno_existe = result_aluno.scalar_one_or_none()
+    
     if not aluno_existe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
             detail=f"Não é possível efetuar a matrícula. O aluno com ID {dados.aluno_id} não existe."
         )
     
-    # Valida se a disciplinas informada existe?
-    disciplina_existe = db.query(Disciplina).filter(Disciplina.id == dados.disciplina_id).first()
+    result_disc = await db.execute(select(Disciplina).where(Disciplina.id == dados.disciplina_id))
+    disciplina_existe = result_disc.scalar_one_or_none()
+    
     if not disciplina_existe:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, 
@@ -37,38 +45,80 @@ def criar_matricula(dados: MatriculaCreate, db: Session = Depends(get_db)):
         disciplina_id=dados.disciplina_id
     )
     db.add(nova_matricula)
-    db.commit()
-    db.refresh(nova_matricula)
-    return nova_matricula
+    await db.commit()
+
+    # Re-consulta carregando explicitamente tanto `aluno` quanto `disciplina`
+    statement = (
+        select(Matricula)
+        .options(
+            selectinload(Matricula.aluno),
+            selectinload(Matricula.disciplina)
+        )
+        .where(
+            Matricula.aluno_id == nova_matricula.aluno_id,
+            Matricula.disciplina_id == nova_matricula.disciplina_id
+        )
+    )
+    result = await db.execute(statement)
+    return result.scalar_one()
+
 
 # --- 2. LISTAR TODAS AS MATRÍCULAS (GET /matriculas) ---
 @router.get("", response_model=List[MatriculaResponse])
-def listar_matriculas(db: Session = Depends(get_db)):
-    #return db.query(Matricula).all()
-    return db.query(Matricula).options(joinedload(Matricula.aluno)).all()
+async def listar_matriculas(
+    db: AsyncSession = Depends(get_db),
+):
+    statement = select(Matricula).options(
+        selectinload(Matricula.aluno),
+        selectinload(Matricula.disciplina)
+    )
+    result = await db.execute(statement)
+    return result.scalars().all()
+
 
 # --- 3. BUSCAR UMA MATRÍCULA POR IDS (GET /matriculas/{aluno_id}/{disciplina_id}) ---
 @router.get("/{aluno_id}/{disciplina_id}", response_model=MatriculaResponse)
-def buscar_matricula(aluno_id: int, disciplina_id: int, db: Session = Depends(get_db)):
-    matricula = db.query(Matricula).filter(
-        Matricula.aluno_id == aluno_id, 
-        Matricula.disciplina_id == disciplina_id
-    ).first()
+async def buscar_matricula(
+    aluno_id: int, 
+    disciplina_id: int, 
+    db: AsyncSession = Depends(get_db),
+):
+    statement = (
+        select(Matricula)
+        .options(
+            selectinload(Matricula.aluno),
+            selectinload(Matricula.disciplina)
+        )
+        .where(
+            Matricula.aluno_id == aluno_id, 
+            Matricula.disciplina_id == disciplina_id
+        )
+    )
+    result = await db.execute(statement)
+    matricula = result.scalar_one_or_none()
+    
     if not matricula:
-        raise HTTPException(status_code=404, detail="Matrícula não encontrada!")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matrícula não encontrada!")
     
     return matricula
 
-# --- 4. DELETAR UMA MATRÍCULA (DELETE /matricula/{aluno_id}/{disciplina_id}) ---
+# --- 4. DELETAR UMA MATRÍCULA (DELETE /matriculas/{aluno_id}/{disciplina_id}) ---
 @router.delete("/{aluno_id}/{disciplina_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deletar_disciplina(aluno_id: int, disciplina_id: int, db: Session = Depends(get_db)):
-    matricula = db.query(Disciplina).filter(
+async def deletar_matricula(
+    aluno_id: int, 
+    disciplina_id: int, 
+    db: AsyncSession = Depends(get_db),
+):
+    statement = select(Matricula).where(
         Matricula.aluno_id == aluno_id,
         Matricula.disciplina_id == disciplina_id
-    ).first()
-    if not matricula:
-        raise HTTPException(status_code=404, detail="Matrícula não encontrada")
+    )
+    result = await db.execute(statement)
+    matricula = result.scalar_one_or_none()
     
-    db.delete(matricula)
-    db.commit()
+    if not matricula:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matrícula não encontrada")
+    
+    await db.delete(matricula)
+    await db.commit()
     return None

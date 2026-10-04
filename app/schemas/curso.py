@@ -5,7 +5,14 @@ from typing import Optional
 class AlunoResponse(BaseModel):
     id: int
     nome: str
-    turma: int
+    turma: int 
+    class Config:
+        from_attributes = True
+
+class DisciplinaResponse(BaseModel):
+    id: int
+    nome: str
+    carga_horaria: int
     class Config:
         from_attributes = True
 
@@ -21,6 +28,7 @@ class CursoResponse(BaseModel):
     duracao: int
     criado_em: datetime
     alterado_em: datetime
+    disciplina: list[DisciplinaResponse] = []
     aluno: list[AlunoResponse] = []
 
     # Necessário no Pydantic v2 para ler objetos do SQLAlchemy automaticamente

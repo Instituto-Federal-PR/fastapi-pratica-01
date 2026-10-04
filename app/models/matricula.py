@@ -16,4 +16,3 @@ class Matricula(Base):
     # Relacionamentos
     aluno = relationship("Aluno", back_populates="matricula")
     disciplina = relationship("Disciplina", back_populates="matricula")
-    

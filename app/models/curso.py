@@ -15,5 +15,5 @@ class Curso(Base):
 
     # Relacionamento: Permite acessar as disciplinas de um curso
     # Ex: meu_curso.disciplinas
-    aluno = relationship("Aluno", back_populates="curso", cascade="all, delete-orphan")
     disciplina = relationship("Disciplina", back_populates="curso", cascade="all, delete-orphan")
+    aluno = relationship("Aluno", back_populates="curso", cascade="all, delete-orphan")

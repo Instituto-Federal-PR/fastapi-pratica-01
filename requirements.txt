@@ -3,3 +3,5 @@ uvicorn>=0.51.0
 sqlalchemy>=2.0.30 
 alembic>=1.13.1
 psycopg[binary]>=3.1.0
+sqlalchemy[asyncio]
+greenlet
